@@ -8,7 +8,9 @@
 #
 # For inquiries contact  george.drettakis@inria.fr
 #
-
+import torch.nn.functional as F
+from utils.dash_utils import get_dash_resolution_scale, get_primitive_budget
+import copy
 import torch
 import numpy as np
 import os, random, time
@@ -92,15 +94,38 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         viewpoint_cam = viewpoint_stack.pop(rand_idx)
         _ = viewpoint_indices.pop(rand_idx)
 
+        # --- BẮT ĐẦU THÊM MỚI: DashGaussian Dynamic Resolution ---
+        current_res_scale = 1.0
+        if opt.dash:
+            current_res_scale = get_dash_resolution_scale(iteration, opt.dash_warmup_iters)
+        
+        gt_image = viewpoint_cam.original_image.cuda()
+        
+        if current_res_scale < 1.0:
+            new_h = int(gt_image.shape[1] * current_res_scale)
+            new_w = int(gt_image.shape[2] * current_res_scale)
+            
+            # Thu nhỏ ảnh Ground Truth
+            gt_image = F.interpolate(gt_image.unsqueeze(0), size=(new_h, new_w), mode='bilinear', align_corners=False).squeeze(0)
+            
+            # Copy camera để không làm hỏng camera gốc
+            render_cam = copy.copy(viewpoint_cam)
+            render_cam.image_height = new_h
+            render_cam.image_width = new_w
+        else:
+            render_cam = viewpoint_cam
+        # --- KẾT THÚC THÊM MỚI ---
+
         # Render
         if (iteration - 1) == debug_from:
             pipe.debug = True
 
-        render_pkg = render_fastgs(viewpoint_cam, gaussians, pipe, bg, opt.mult)
+        # render_pkg = render_fastgs(viewpoint_cam, gaussians, pipe, bg, opt.mult)
+        render_pkg = render_fastgs(render_cam, gaussians, pipe, bg, opt.mult)
         image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
 
         # Loss
-        gt_image = viewpoint_cam.original_image.cuda()
+        # gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
         ssim_value = fast_ssim(image.unsqueeze(0), gt_image.unsqueeze(0))
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim_value)
@@ -145,7 +170,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                                                 radii=radii,
                                                 args = opt,
                                                 importance_score = importance_score,
-                                                pruning_score = pruning_score)
+                                                pruning_score = pruning_score,
+                                                iteration = iteration) # <-- THÊM DÒNG NÀY
 
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()

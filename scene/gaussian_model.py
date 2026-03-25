@@ -8,7 +8,7 @@
 #
 # For inquiries contact  george.drettakis@inria.fr
 #
-
+from utils.dash_utils import get_primitive_budget
 import torch
 import numpy as np
 from utils.general_utils import inverse_sigmoid, get_expon_lr_func, build_rotation, identity_gate
@@ -465,7 +465,7 @@ class GaussianModel:
 
         self.densification_postfix(new_xyz, new_features_dc, new_features_rest, new_opacities, new_scaling, new_rotation, new_tmp_radii)
 
-    def densify_and_prune_fastgs(self, max_screen_size, min_opacity, extent, radii, args, importance_score = None, pruning_score = None):
+    def densify_and_prune_fastgs(self, max_screen_size, min_opacity, extent, radii, args, importance_score = None, pruning_score = None, iteration=None):
         
         ''' 
             Densification and Pruning based on FastGS criteria:
@@ -491,10 +491,53 @@ class GaussianModel:
 
         # This is our multi-view consisent metric for densification
         # We use this metric to further filter the candidates for densification, which is similar to taming 3dgs.
+        # metric_mask = importance_score > 5
+
+        # self.densify_and_clone_fastgs(metric_mask, all_clones)
+        # self.densify_and_split_fastgs(metric_mask, all_splits)
+
+        # --- BẮT ĐẦU SỬA: Primitive Growth ---
+        # 1. Tính toán metric mask gốc của FastGS
         metric_mask = importance_score > 5
+        
+        # 2. Logic giới hạn ngân sách (nếu bật --dash)
+        if args.dash and iteration is not None:
+            current_num_points = self.get_xyz.shape[0]
+            # Tính toán ngân sách cho vòng lặp hiện tại
+            current_budget = get_primitive_budget(iteration, args.densify_until_iter, args.preset_upperbound)
+            
+            # Tính tổng số điểm tiềm năng chuẩn bị sinh ra (Clone sinh 1, Split sinh 1 thêm 1)
+            potential_clones = torch.logical_and(metric_mask, all_clones).sum().item()
+            potential_splits = torch.logical_and(metric_mask, all_splits).sum().item()
+            total_potential_new_points = potential_clones + potential_splits
+            
+            # Nếu số lượng điểm sinh ra làm vượt ngân sách
+            if current_num_points + total_potential_new_points > current_budget:
+                allowed_new_points = max(0, current_budget - current_num_points)
+                
+                if allowed_new_points > 0:
+                    # Tạo mask chứa tất cả các điểm tiềm năng (cả clone và split)
+                    all_candidates_mask = torch.logical_and(metric_mask, torch.logical_or(all_clones, all_splits))
+                    
+                    # Lấy importance_score của các ứng viên và gán những điểm không phải ứng viên = -1
+                    candidate_scores = importance_score.clone()
+                    candidate_scores[~all_candidates_mask] = -1.0
+                    
+                    # Tìm top K điểm có điểm số cao nhất (K = allowed_new_points)
+                    _, top_indices = torch.topk(candidate_scores, allowed_new_points)
+                    
+                    # Tạo metric_mask mới chỉ cho phép top K điểm này được lọt qua
+                    strict_metric_mask = torch.zeros_like(metric_mask, dtype=torch.bool, device="cuda")
+                    strict_metric_mask[top_indices] = True
+                    
+                    metric_mask = strict_metric_mask
+                else:
+                    # Nếu ngân sách đã cạn, không cho sinh thêm điểm nào
+                    metric_mask = torch.zeros_like(metric_mask, dtype=torch.bool, device="cuda")
 
         self.densify_and_clone_fastgs(metric_mask, all_clones)
         self.densify_and_split_fastgs(metric_mask, all_splits)
+        # --- KẾT THÚC SỬA ---
 
         prune_mask = (self.get_opacity < min_opacity).squeeze()
         if max_screen_size:

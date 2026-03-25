@@ -1,0 +1,31 @@
+# Bỏ qua dữ liệu và kết quả train
+output/
+datasets/
+models/
+
+# Bỏ qua các file rác của Python
+__pycache__/
+*.pyc
+
+# Bỏ qua môi trường ảo (nếu bạn để thư mục env trong project)
+fastgs_env/
+env/
+venv/
+
+# Bỏ qua file cấu hình IDE (nếu dùng VSCode, PyCharm)
+.vscode/
+.idea/
+
+# Bỏ qua các file cài đặt và file hệ thống
+*.sh
+*.deb
+*.exe
+*.iso
+
+# Bỏ qua file cache của Python
+__pycache__/
+*.pyc
+
+# Bỏ qua các file ảnh/kết quả không cần thiết (tuỳ chọn)
+*.jpg
+*.png

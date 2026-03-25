@@ -110,6 +110,15 @@ class OptimizationParams(ParamGroup):
 
         self.random_background = False
         self.optimizer_type = "default"
+
+        # --- BẮT ĐẦU THÊM MỚI: DashGaussian Params ---
+        # Chỉ cần khai báo biến, hệ thống sẽ tự động bắt lấy và tạo argument
+        self.dash = False                   
+        self.preset_upperbound = 1_000_000  
+        self.dash_warmup_iters = 3000       
+        self.fast_adam = False              
+        # --- KẾT THÚC THÊM MỚI ---
+        
         super().__init__(parser, "Optimization Parameters")
 
 def get_combined_args(parser : ArgumentParser):
