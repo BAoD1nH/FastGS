@@ -70,10 +70,15 @@
 
 #6/ Train kitchen (add Dash + sparse_adam + VCD update)
 # Bước 1: Train
-CUDA_VISIBLE_DEVICES=0 OAR_JOB_ID=kitchen python train.py -s ./datasets/mipnerf360/kitchen -i images_2 --eval  --dash  --preset_upperbound 1000000 --optimizer_type default  --densification_interval 500 --test_iterations 30000 --highfeature_lr 0.02 --loss_thresh 0.06 --grad_abs_thresh 0.0008
+CUDA_VISIBLE_DEVICES=0 OAR_JOB_ID=kitchen python train.py -s ./datasets/mipnerf360/kitchen -i images_2 --eval  --dash --dash_warmup_iters 1500 --preset_upperbound 2500000 --optimizer_type default  --densification_interval 500 --test_iterations 30000 --highfeature_lr 0.02 --loss_thresh 0.06 --grad_abs_thresh 0.0008
 
 # Bước 2: Render (Tạo ảnh kết quả từ model vừa train)
 CUDA_VISIBLE_DEVICES=0 python render.py -m output/kitchen --skip_train
 
 # Bước 3: Metrics (Chấm điểm PSNR/SSIM)
 CUDA_VISIBLE_DEVICES=0 python metrics.py -m output/kitchen
+
+# # Train_big kitchen
+# CUDA_VISIBLE_DEVICES=0 OAR_JOB_ID=kitchen_big python train.py -s ./datasets/mipnerf360/kitchen -i images_2 --eval --dash --dash_warmup_iters 1500 --preset_upperbound 1500000 --densification_interval 100  --optimizer_type default --test_iterations 30000  --highfeature_lr 0.02 --loss_thresh 0.06  --grad_abs_thresh 0.0003
+# CUDA_VISIBLE_DEVICES=0 python render.py -m output/kitchen_big --skip_train
+# CUDA_VISIBLE_DEVICES=0 python metrics.py -m output/kitchen_big
